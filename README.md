@@ -9,3 +9,18 @@ a CLI
 
 **Note**: Still under heavy development, please help and contribute with issues
 or pull requests :-)
+
+## Installation and Usage
+After downloading the source code, run these commands inside the directory to
+install all the requirements.
+
+    npm install -g coffee
+    npm install 
+    
+This will install CoffeeScript and dependencies, everything required at the
+moment to run the main script.
+
+Once ready, the CLI to the explorer is `main.coffee`. To get some help run:
+
+    coffee main.coffee --help
+

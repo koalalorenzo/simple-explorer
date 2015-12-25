@@ -72,11 +72,20 @@ class Daemon
       
     # This will prevent problems when errors are raised:
     if not @_debug then @node.on 'error', -> return 
+    else @enable_debug_events()
     return @
       
   stop: ->
     # Stop the node connections.
     @node.destroy()
+    
+  stop_when_full: (cb)->
+    # When all the blocks available are syncronized, stop the node.
+    # This method accepts also a callback
+    @node.once 'full', =>
+      console.log 'Blocks loaded (full). Stopping the node!' if @_debug
+      @stop()
+      cb() if cb
     
   connect_to: (addr, port=8333) ->
     # Add an address to the available addresses in @_seed
@@ -85,12 +94,20 @@ class Daemon
       console.log 'New peer added: %s', host if @_debug
       @_seeds.push host
 
-  enable_debug_errors: (use_log=false)->
-    # Use this method to return errors to the console
-    if use_log
-      @node.on 'error', (error) -> console.log(error)
-    else
-      @node.on 'error', (error) -> console.error(error)
+  enable_debug_events: (show_errors=false)->
+    # Use this method to return errors and messages to the console
+    @_debug = true
+
+    @node.on 'block', (block) -> 
+      block_hash = bcoin.utils.revHex block.hash('hex')
+      console.log "Block Received: #{block_hash}"
+    @node.on 'tx', (tx) -> 
+      tx_hash = bcoin.utils.revHex tx.hash('hex')
+      console.log "TX Received: #{tx_hash}"
+    
+    if show_errors 
+      @node.on 'error', console.log
+
     return @
     
   enable_autoconnect: ->

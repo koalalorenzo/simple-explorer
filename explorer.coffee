@@ -13,6 +13,7 @@ class Explorer
   constructor: (@daemon) ->
     @_txs_received = []
     @daemon = @daemon or new Daemon()
+    @_debug = if @daemon._debug is not undefined then @daemon._debug else false
     return @
     
   get_loading_percentage: ->
@@ -21,15 +22,18 @@ class Explorer
 
   call_transaction: (tx_hash, callback) ->
     # Use a callback to get from peers a specific transaction
-    @daemon.node.watch tx_hash
+    console.log "Watching TX: #{tx_hash}" if @_debug
     
     @daemon.node.on 'tx', (_tx, _peer) =>
-      hash = bcoin.utils.revHex(_tx.hash('hex'))
+      hash = bcoin.utils.revHex(_tx.hash('hex')) 
 
       if hash is tx_hash and !~@_txs_received.indexOf(_tx)
         # Running the callback if it's the first time we see this tx
+        console.log "TX Watched #{tx_hash}" if @_debug
         @_txs_received.push _tx
         callback _tx, _peer if callback
+
+    @daemon.node.watch tx_hash
 
   call_block: (block_hash, callback) ->
     # Use a callback to get the object (JSON parsed?) of a block

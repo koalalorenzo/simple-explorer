@@ -37,9 +37,11 @@ class Explorer
 
   call_block: (block_hash, callback) ->
     # Use a callback to get the object (JSON parsed?) of a block
-    new Error "Work in progress... Sorry!"  
+    console.error "Work in progress... Sorry!"  
+    process.exit(1)
     
   call_address_balance: (address_hash, callback) ->
-    new Error "Work in progress... Sorry!"  
+    console.error "Work in progress... Sorry!"  
+    process.exit(1)
  
 module.exports = Explorer

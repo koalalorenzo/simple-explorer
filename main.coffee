@@ -31,7 +31,6 @@ optimist = require('optimist')
           .describe('debug', 'Enable debug messages')
           .default('debug', false)
            
-Daemon = require './daemon'
 Explorer = require './explorer'
 
 ###
@@ -39,15 +38,9 @@ Explorer = require './explorer'
 ###
 
 get_explorer = (args) ->
-  # Start the daemon and the explorer. Returns Explorer
-  daemon_instance = new Daemon()
-  daemon_instance.start()
-  daemon_instance.enable_debug_events() if args.debug == true
-  daemon_instance.enable_autoconnect()
-
-  # Create the explorer
-  explorer = new Explorer(daemon_instance)
-  # explorer.
+  # Start the node!
+  explorer = new Explorer()
+  explorer.start()
   return explorer
 
 exit = (args)->
@@ -62,15 +55,7 @@ exit = (args)->
 
 if optimist.argv.sync
   explorer = get_explorer(optimist.argv)
-  explorer.daemon.stop_when_full ()->
-    exit(optimist.argv)
   
-  setInterval ()->
-    peers = explorer.daemon.node.peers.block.length
-    percentage = explorer.get_loading_percentage()-1
-    console.log("Peers: #{peers}, Load: #{percentage}% blocks.") if explorer.daemon._debug
-  , 2500
-
 else if optimist.argv.address
   # Get the balance of an Address
   explorer = get_explorer(optimist.argv)

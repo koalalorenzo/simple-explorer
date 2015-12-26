@@ -110,6 +110,8 @@ class Explorer
   ###
   call_transaction: (tx_hash, callback) ->
     # Use a callback to get the object of a transaction
+    # Remember, it will only access transactions in the mempool
+    # read more here:https://en.bitcoin.it/wiki/Protocol_documentation#getdata
     messages = new Messages()
     message = messages.GetData.forTransaction(tx_hash)
     message_inv = messages.Inventory.forTransaction(tx_hash)

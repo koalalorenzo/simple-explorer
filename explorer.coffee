@@ -72,18 +72,18 @@ class Explorer
     #   @_watch_tx_callbacks[message.transaction.id].forEach (callback) ->
     #     callback(message) if typeof callback is "function"
 
-    console.log "Transaction:"
-    console.log message
+    console.log "Transaction:", message if @_debug
     return
         
   _on_not_found: (peer, message)->
     # This method is used when a peer answer a Not found message
-    console.log "NOT FOUND:", message 
+    console.log "NOT FOUND:", message if @_debug
     return 
      
   _on_inventory: (peer, message)->
     # This method is used when a peer provide its inventory
     @_inventory.push message.inventory[0]
+    console.log "Inventory:", message if @_debug
     return
 
   _connectTo: (addr)->
@@ -100,6 +100,7 @@ class Explorer
     
     if time_gap > 0
       new_interval = setInterval =>
+          console.log "Broadcasting a message:", message if @_debug
           @node.sendMessage message
         , time_gap
       @_intervals.push new_interval
@@ -141,6 +142,6 @@ class Explorer
     
   call_address_balance: (address_hash, callback) ->
     console.error "Work in progress... Sorry!"  
-    process.exit(1)
+    # process.exit(1)
  
 module.exports = Explorer

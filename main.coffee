@@ -32,6 +32,11 @@ optimist = require('optimist')
           .default('debug', false)
            
 Explorer = require './explorer'
+Daemon = require './daemon'
+
+# Instances:
+daemon = undefined
+explorer = undefined 
 
 ###
 # Methods
@@ -39,26 +44,29 @@ Explorer = require './explorer'
 
 get_explorer = (args) ->
   # Start the node!
-  explorer = new Explorer()
-  explorer.start()
-  return explorer
+  daemon = new Daemon()
+  daemon.start()
+
+  explorer = new Explorer(daemon)
+  return [explorer, daemon]
 
 exit = (args)->
   console.log("Closing the process in 1 second...") if args.debug == true
+  daemon.stop()
   setTimeout ()->
     process.exit 0
-  , 1000
+  , 1500
 
 ###
 # Parsing the CLI options and running methods:
 ###
 
 if optimist.argv.sync
-  explorer = get_explorer(optimist.argv)
+  [explorer, daemon] = get_explorer(optimist.argv)
   
 else if optimist.argv.address
   # Get the balance of an Address
-  explorer = get_explorer(optimist.argv)
+  [explorer, daemon] = get_explorer(optimist.argv)
 
   explorer.call_address_balance optimist.argv.address, (_balance)->
     console.log _balance.toJSON()
@@ -66,7 +74,7 @@ else if optimist.argv.address
 
 else if optimist.argv.block
   # Get a block
-  explorer = get_explorer(optimist.argv)
+  [explorer, daemon] = get_explorer(optimist.argv)
 
   explorer.call_block optimist.argv.block, (_block)->
     console.log _block.toJSON()
@@ -74,7 +82,7 @@ else if optimist.argv.block
   
 else if optimist.argv.transaction
   # Get a transaction
-  explorer = get_explorer(optimist.argv)
+  [explorer, daemon] = get_explorer(optimist.argv)
 
   explorer.call_transaction optimist.argv.transaction, (_tx)->
     console.log _tx.toJSON()

@@ -24,11 +24,12 @@ class Daemon extends EventEmitter
     @_inventory = []
     @_txs = []
     @_blocks = []
+    @_is_started = false
     return @
 
   start: (listen=true)->
     # Start the bitcoin pool and connect to other peers. 
-    return if @node.numberConnected() > 0
+    return if @is_connected()
     
     # Set up the event listner for transactions
     @node.on 'peertx', (peer, message) ->
@@ -46,7 +47,7 @@ class Daemon extends EventEmitter
     @node.listen() if listen
 
     @emit "started"
-    
+    @_is_started = true
     return @
   
   stop: ->
@@ -56,8 +57,13 @@ class Daemon extends EventEmitter
     @node.disconnect()
 
     @emit "stopped"
+    @_is_started = false
     return @
     
+  is_connected: ->
+    # Validate if the Daemon's node is connected to the network.
+    return (@node.numberConnected() > 0) or (@_is_started is true)
+
   ###
   # Callbacks for data collection (storage) and "emit" events
   ###

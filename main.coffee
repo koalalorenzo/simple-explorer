@@ -31,8 +31,8 @@ optimist = require('optimist')
           .describe('debug', 'Enable debug messages')
           .default('debug', false)
            
-Explorer = require './explorer'
 Daemon = require './daemon'
+Explorer = require './explorer'
 
 # Instances:
 daemon = undefined
@@ -52,7 +52,6 @@ get_explorer = (args) ->
 
 exit = (args)->
   console.log("Closing the process in 1 second...") if args.debug == true
-  daemon.stop()
   setTimeout ()->
     process.exit 0
   , 1500
@@ -63,13 +62,14 @@ exit = (args)->
 
 if optimist.argv.sync
   [explorer, daemon] = get_explorer(optimist.argv)
-  
+    
 else if optimist.argv.address
   # Get the balance of an Address
   [explorer, daemon] = get_explorer(optimist.argv)
 
   explorer.call_address_balance optimist.argv.address, (_balance)->
     console.log _balance.toJSON()
+    daemon.stop()
     exit(optimist.argv)
 
 else if optimist.argv.block
@@ -78,6 +78,7 @@ else if optimist.argv.block
 
   explorer.call_block optimist.argv.block, (_block)->
     console.log _block.toJSON()
+    daemon.stop()
     exit(optimist.argv)
   
 else if optimist.argv.transaction
@@ -86,6 +87,7 @@ else if optimist.argv.transaction
 
   explorer.call_transaction optimist.argv.transaction, (_tx)->
     console.log _tx.toJSON()
+    daemon.stop()
     exit(optimist.argv)  
     
 else

@@ -42,8 +42,8 @@ explorer = undefined
 # Methods
 ###
 
-get_explorer = (args) ->
-  # Start the node!
+setup_and_start = (args) ->
+  # Start the node! It will return an array with the explorer and the daemon.
   daemon = new Daemon()
   daemon.start()
 
@@ -61,11 +61,11 @@ exit = (args)->
 ###
 
 if optimist.argv.sync
-  [explorer, daemon] = get_explorer(optimist.argv)
+  [explorer, daemon] = setup_and_start(optimist.argv)
     
 else if optimist.argv.address
   # Get the balance of an Address
-  [explorer, daemon] = get_explorer(optimist.argv)
+  [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_address_balance optimist.argv.address, (_balance)->
     console.log _balance.toJSON()
@@ -74,7 +74,7 @@ else if optimist.argv.address
 
 else if optimist.argv.block
   # Get a block
-  [explorer, daemon] = get_explorer(optimist.argv)
+  [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_block optimist.argv.block, (_block)->
     console.log _block.toJSON()
@@ -83,7 +83,7 @@ else if optimist.argv.block
   
 else if optimist.argv.transaction
   # Get a transaction
-  [explorer, daemon] = get_explorer(optimist.argv)
+  [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_transaction optimist.argv.transaction, (_tx)->
     console.log _tx.toJSON()
@@ -93,3 +93,4 @@ else if optimist.argv.transaction
 else
   console.log optimist.help()
   process.exit 1
+  

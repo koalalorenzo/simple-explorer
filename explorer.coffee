@@ -4,18 +4,20 @@ the blocks saved or ask the nodes for missing new data.
 ###
 
 Daemon = require("./daemon")
-Messages = require('bitcore-p2p').Messages
+bitcore_p2p = require('bitcore-p2p')
+
 
 class Explorer
   constructor: (@settings=Daemon.DEFAULT_SETTINGS, @daemon=null) ->
     @daemon = new Daemon(@settings) if not @daemon
+    @bloom_filter = new bitcore_p2p.BloomFilter.create(1)
     return @
 
   call_transaction: (tx_hash, callback) ->
     # Use a callback to get the object of a transaction
     # Remember, it will only access transactions in the mempool
     # read more here:https://en.bitcoin.it/wiki/Protocol_documentation#getdata
-    messages = new Messages()
+    messages = new bitcore_p2p.Messages()
     message = messages.GetData.forTransaction(tx_hash)
     message_inv = messages.Inventory.forTransaction(tx_hash)
 
@@ -28,7 +30,7 @@ class Explorer
 
   call_block: (block_hash, callback) ->
     # Use a callback to get the object of a block
-    messages = new Messages()
+    messages = new bitcore_p2p.Messages()
     message = messages.GetData.forBlock(block_hash)
     
     @daemon.on block_hash, callback

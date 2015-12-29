@@ -10,8 +10,6 @@ received and processed, an event is emitted. Example:
     # We found the block!
     console.log block
 
-The daemon requests all the blocks headers
-
 ###
 path = require('path')
 levelup = require('levelup')
@@ -40,9 +38,14 @@ class Daemon extends EventEmitter
     @_intervals = []
     
     @storage = levelup(@settings.workdir)
+    @_blocks_headers_known = [] # Used to avoid multipe callbacks
     @_bestHeight = 0
     
     @_is_started = false
+    
+    #Debug values
+    @_last_block = null
+    @_last_inventory = []
     return @
 
   start: (listen=true)->
@@ -102,14 +105,42 @@ class Daemon extends EventEmitter
     # Validate if the Daemon's node is connected to the network.
     return (@node.numberConnected() > 0) or (@_is_started is true)
 
+  request_missing_blocks: ->
+    # This method will check the database and request the missing headers to
+    # the other peers.
+    @storage.createReadStream()
+      .on 'data', (data) =>
+        # Getting from the stream, only the headers
+        return if not ~data.key.indexOf("headers/") or not data.value
+
+        block = JSON.parse(data.value)
+        prev_hash = BufferUtil.reverse(block.prevHash).toString('hex')
+        
+        # Ignore blocks that are already in the DB
+        if !~@_blocks_headers_known.indexOf block.hash
+          @_blocks_headers_known.push(block.hash)
+        
+        # Now If the previous block is not available, request it
+        @_check_if_previous_block_missing block.prevHash
+
+      .on 'end', () =>
+        console.log "Missing headers check completed" if @_debug
+
   ###
   # Callbacks for data collection and "emit" events
   ###
+  
+  _check_if_previous_block_missing: (prev_hash) ->
+    # Check if the previous block is missing from the storage
+    @storage.get "headers/#{prev_hash}", (_err, _head) =>
+      return if not _err
+      console.log "Headers missing: #{prev_hash}" if @_debug
+      @_request_block prev_hash
 
   _on_peer_connected: (peer, message) ->
     # This method is used when a peer is connected.
 
-    if peer.bestHeight > @_bestHeight
+    if peer.bestHeight >= @_bestHeight
       # if the peer has a bigger Height, ask for his inventory
       @_request_inv(peer)
       @_bestHeight = peer.bestHeight
@@ -120,26 +151,35 @@ class Daemon extends EventEmitter
     block = message.block
 
     @emit "block", block
-
+    @emit "#{block.hash}", block
+    @_last_block = block
+    
+    # Ignore if this block is already known
+    return if ~@_blocks_headers_known.indexOf block.hash 
+      
     # Saving the headers in the DB if not already there
     @storage.get "headers/#{block.hash}", (err, old_header) =>
       return if not err
       console.log "Block received: #{block.hash}" if @_debug
-      @storage.put "headers/#{block.hash}", block.headers
+      
+      string_header = JSON.stringify(block.header.toJSON())
+      @storage.put "headers/#{block.hash}", string_header
+      @_check_if_previous_block_missing block.header.toJSON().prevHash
 
     # ToDo: Understand if we are interested in this block by inspecting its
     #       content, then save the entire block too.
     # @storage.get "blocks/#{block.hash}", (err, old_block) =>
     #   return if not err
-    #   @storage.put "blocks/#{block.hash}", block
+    #   string_block = JSON.stringify(block.toJSON())
+    #   @storage.put "blocks/#{block.hash}", string_block
   
-    @emit "#{block.hash}", block
     return
      
   _on_inventory: (peer, message)->
     # This method is used when a peer provide its inventory
     @emit "inv", message
-    
+    @_last_inventory = message.inventory
+
     for content in message.inventory
       switch content.type
 
@@ -154,7 +194,7 @@ class Daemon extends EventEmitter
 
   _on_tx: (peer, message)->
     # This method is used when a peer provide a transaction
-    # reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
+    # reverse_hash = BufferUtil.reverse(tx_hash).toString('hex')
     # @emit "#{reverse_hash}", content
     return
         

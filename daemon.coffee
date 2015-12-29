@@ -10,10 +10,16 @@ received and processed, an event is emitted. Example:
     # We found the block!
     console.log block
 
+The daemon requests all the blocks headers
+
 ###
-Pool = require('bitcore-p2p').Pool
 EventEmitter = require('events')
 bitcore = require('bitcore-lib')
+bitcore_p2p = require('bitcore-p2p')
+levelup = require('level')
+
+Pool = bitcore_p2p.Pool
+Inventory = bitcore_p2p.Inventory
 BufferUtil = bitcore.util.buffer
 
 DEFAULT_SETTINGS =
@@ -22,13 +28,17 @@ DEFAULT_SETTINGS =
     relay: false
     dnsSeed: true
     listenAddr: true
-
+  debug: false
+  workdir: path.join process.env.HOME, ".simple-explorer/"
+    
 class Daemon extends EventEmitter
   constructor: (@settings=DEFAULT_SETTINGS) ->
     @node = new Pool(@settings.node)
     
-    @_debug = @settings.debug
+    @_debug = @settings.debug or false
     @_intervals = []
+    
+    @storage = levelup(@settings.workdir)
     
     @_inventory = []
     @_txs = []
@@ -39,26 +49,31 @@ class Daemon extends EventEmitter
   start: (listen=true)->
     # Start the bitcoin pool and connect to other peers. 
     return if @is_connected()
+  
+    # Set up the event listner for transactions
+    @node.on 'peerblock', (peer, message) =>
+      @_on_block(peer, message)
     
     # Set up the event listner for transactions
-    @node.on 'peertx', (peer, message) ->
+    @node.on 'peertx', (peer, message) =>
       @_on_tx(peer, message)
   
     # Set up the event listner for NotFound messages
-    @node.on 'peernotfound', (peer, message)->
+    @node.on 'peernotfound', (peer, message) =>
       @_on_not_found(peer, message)
     
     # Set up the event listner for getdata messages
-    @node.on 'peergetdata', (peer, message)->
+    @node.on 'peergetdata', (peer, message) =>
       @_on_data(peer, message)
       
     # Set up the event listner for inventory messages
-    @node.on 'peerinv', (peer, message) ->
+    @node.on 'peerinv', (peer, message) =>
       @_on_inventory(peer, message)
     
+    @storage.open() if @storage.isClosed()
     @node.connect()
     @node.listen() if listen
-
+    
     @emit "started"
     @_is_started = true
     return @
@@ -67,7 +82,9 @@ class Daemon extends EventEmitter
     # Stop the connections, destroy the intervals
     for _interval in @_intervals
       clearInterval _interval
+
     @node.disconnect()
+    @storage.close() if @storage.isOpen()
 
     @emit "stopped"
     @_is_started = false
@@ -81,15 +98,13 @@ class Daemon extends EventEmitter
   # Callbacks for data collection and "emit" events
   ###
 
-  _on_data: (peer, message) ->
-    for content in message.inventory
-       @_inventory.push content
-
-    @emit "getdata", message
+  _on_getdata: (peer, message) ->
+    # When some node is requesting some info using getdata.
+    return
 
   _on_tx: (peer, message)->
     # This method is used when a peer provide a transaction
-    for content in message.inventory
+    for content in message.inventory when content.type is Inventory.TYPE.TX
       @_inventory.push content
       
       if !~ @_txs.indexOf(content)
@@ -98,7 +113,17 @@ class Daemon extends EventEmitter
 
         reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
         @emit "#{reverse_hash}", content
+    return
 
+  _on_block: (peer, message)->
+    # This method is used when a peer provide a block
+    console.log "FUCK YEAH WE RECEIVED A BLOCK"
+    if !~ @_blocks.indexOf(message.block)
+      @_blocks.push(message.block)
+      @emit "block", message.block
+
+      # reverse_hash = BufferUtil.reverse(message.hash).toString('hex')
+      # @emit "#{reverse_hash}", message
     return
         
   _on_not_found: (peer, message)->
@@ -109,17 +134,36 @@ class Daemon extends EventEmitter
      
   _on_inventory: (peer, message)->
     # This method is used when a peer provide its inventory
-    for content in message.inventory
-      @_inventory.push content
-      
-    console.log "Inventory:", message if @_debug
     @emit "inv", message
+    
+    for content in message.inventory
+      console.log "INVENTORY RECEIVED FROM #{peer.ip} TYPE: #{content.type}"
+      @_inventory.push content
+            
+      switch content.type
+        when Inventory.TYPE.BLOCK then @_request_block content.hash
+        # when Inventory.TYPE.TX then @request_tx content.hash
+        # when Inventory.TYPE.FILTERED_BLOCK then 
     return
 
   _connectTo: (addr)->
     # Connect to a specific Peer
     @node._addAddr(addr)    
     return
+    
+  ###
+  # Sending messages to other peers
+  ###
+
+  _request_block: (hash, peer=null)->
+    # Send a message to a peer (optional) requiring a specific block.
+    messages = new bitcore_p2p.Messages()
+    message = messages.GetData.forBlock(hash)
+    
+    if peer 
+      peer.sendMessage message
+    else
+      @broadcast_message message, time_gap=0
 
   broadcast_message: (message, time_gap=15000, max_attemps=5)->
     # Set an interval (default 15sec) to broadcast a Message to the

@@ -40,6 +40,8 @@ class Daemon extends EventEmitter
     @_intervals = []
     
     @storage = levelup(@settings.workdir)
+    @_block_hashes = []
+    @_bestHeight = 0
     
     @_inventory = []
     @_txs = []
@@ -62,15 +64,22 @@ class Daemon extends EventEmitter
     # Set up the event listner for NotFound messages
     @node.on 'peernotfound', (peer, message) =>
       @_on_not_found(peer, message)
-    
-    # Set up the event listner for getdata messages
-    @node.on 'peergetdata', (peer, message) =>
-      @_on_data(peer, message)
-      
+          
     # Set up the event listner for inventory messages
     @node.on 'peerinv', (peer, message) =>
       @_on_inventory(peer, message)
-    
+
+    # Set up the event listner when a connection happen
+    @node.on 'peerready', (peer, message) =>
+      @_on_peer_connected(peer, message)
+      if @_debug
+        console.log "CONNECT", peer.version, peer.subversion, peer.bestHeight
+
+    # Set up the event listner when a peer disconnects
+    @node.on 'peerdisconnect', (peer, message) =>
+      if @_debug
+        console.log "DISCONN", peer.version, peer.subversion, peer.bestHeight
+
     @storage.open() if @storage.isClosed()
     @node.connect()
     @node.listen() if listen
@@ -101,8 +110,56 @@ class Daemon extends EventEmitter
   # Callbacks for data collection and "emit" events
   ###
 
-  _on_getdata: (peer, message) ->
-    # When some node is requesting some info using getdata.
+  _on_peer_connected: (peer, message) ->
+    # This method is used when a peer is connected.
+
+    if peer.bestHeight > @_bestHeight
+      # if the peer has a bigger Height, ask for his inventory
+      @_request_inv(peer)
+      @_bestHeight = peer.bestHeight
+
+  _on_block: (peer, message)->
+    # This method is used when a peer provide a block. It will save the headers
+    # in the db and emit the event related to the block's hash.
+    block = message.block
+
+    if !~ @_blocks.indexOf(block)
+      @_blocks.push(block)
+
+    @emit "block", block
+
+    # Saving the headers in the DB if not already there
+    @storage.get "headers/#{block.hash}", (err, old_header) =>
+      return if not err
+      console.log "Block received: #{block.hash}" if @_debug
+      @storage.put "headers/#{block.hash}", block.headers
+
+    # ToDo: Understand if we are interested in this block by inspecting its
+    #       content, then save the entire block too.
+    # @storage.get "blocks/#{block.hash}", (err, old_block) =>
+    #   return if not err
+    #   @storage.put "blocks/#{block.hash}", block
+
+  
+    @emit "#{block.hash}", block
+    return
+     
+  _on_inventory: (peer, message)->
+    # This method is used when a peer provide its inventory
+    @emit "inv", message
+    
+    for content in message.inventory
+      @_inventory.push content
+            
+      switch content.type
+
+        when Inventory.TYPE.BLOCK
+          # If we don't have the headers of this block, request it!
+          @storage.get "headers/#{content.hash}", (err, cont) =>
+            @_request_block content.hash if err
+
+        # when Inventory.TYPE.TX then @request_tx content.hash
+        # when Inventory.TYPE.FILTERED_BLOCK then 
     return
 
   _on_tx: (peer, message)->
@@ -117,57 +174,27 @@ class Daemon extends EventEmitter
         reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
         @emit "#{reverse_hash}", content
     return
-
-  _on_block: (peer, message)->
-    # This method is used when a peer provide a block. It will save the headers
-    # in the db and emit the event related to the block's hash.
-    block = message.block
-
-    if !~ @_blocks.indexOf(block)
-      @_blocks.push(block)
-
-    @emit "block", block
-    
-    # ToDo: Understand if we are interested in this block by inspecting its
-    #       content, then save the entire block too.
-    
-    @storage.put "headers/#{block.hash}", block.headers
-    # @storage.put "blocks/#{block.hash}", block
-
-    reverse_hash = BufferUtil.reverse(block.hash).toString('hex')
-    @emit "#{reverse_hash}", block
-    console.log "#{reverse_hash} headers saved" if @_debug
-    console.log "#{block.hash} duhh" if @_debug
-    return
         
   _on_not_found: (peer, message)->
     # This method is used when a peer answer a Not found message
     console.log "NOT FOUND:", message if @_debug
     @emit "notfound", message
     return 
-     
-  _on_inventory: (peer, message)->
-    # This method is used when a peer provide its inventory
-    @emit "inv", message
-    
-    for content in message.inventory
-      @_inventory.push content
-            
-      switch content.type
-        when Inventory.TYPE.BLOCK then @_request_block content.hash
-        # when Inventory.TYPE.TX then @request_tx content.hash
-        # when Inventory.TYPE.FILTERED_BLOCK then 
-    return
-
-  _connectTo: (addr)->
-    # Connect to a specific Peer
-    @node._addAddr(addr)    
-    return
     
   ###
   # Sending messages to other peers
   ###
+  
+  _request_inv: (peer=null)->
+    # Request the inventory to a peer (optional)
+    messages = new bitcore_p2p.Messages()
+    message = messages.GetBlocks()
 
+    if peer 
+      peer.sendMessage message
+    else
+      @broadcast_message message, time_gap=0
+    
   _request_block: (hash, peer=null)->
     # Send a message to a peer (optional) requiring a specific block.
     messages = new bitcore_p2p.Messages()

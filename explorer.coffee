@@ -6,7 +6,6 @@ the blocks saved or ask the nodes for missing new data.
 Daemon = require("./daemon")
 bitcore_p2p = require('bitcore-p2p')
 
-
 class Explorer
   constructor: (@settings=Daemon.DEFAULT_SETTINGS, @daemon=null) ->
     @daemon = new Daemon(@settings) if not @daemon

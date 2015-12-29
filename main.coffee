@@ -45,9 +45,10 @@ explorer = undefined
 setup_and_start = (args) ->
   # Start the node! It will return an array with the explorer and the daemon.
   daemon = new Daemon()
+  daemon._debug = args.debug
   daemon.start()
 
-  explorer = new Explorer(daemon)
+  explorer = new Explorer(daemon.settings, daemon)
   return [explorer, daemon]
 
 exit = (args)->

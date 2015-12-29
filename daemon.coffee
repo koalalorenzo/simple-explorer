@@ -40,12 +40,8 @@ class Daemon extends EventEmitter
     @_intervals = []
     
     @storage = levelup(@settings.workdir)
-    @_block_hashes = []
     @_bestHeight = 0
     
-    @_inventory = []
-    @_txs = []
-    @_blocks = []
     @_is_started = false
     return @
 
@@ -123,9 +119,6 @@ class Daemon extends EventEmitter
     # in the db and emit the event related to the block's hash.
     block = message.block
 
-    if !~ @_blocks.indexOf(block)
-      @_blocks.push(block)
-
     @emit "block", block
 
     # Saving the headers in the DB if not already there
@@ -139,7 +132,6 @@ class Daemon extends EventEmitter
     # @storage.get "blocks/#{block.hash}", (err, old_block) =>
     #   return if not err
     #   @storage.put "blocks/#{block.hash}", block
-
   
     @emit "#{block.hash}", block
     return
@@ -149,8 +141,6 @@ class Daemon extends EventEmitter
     @emit "inv", message
     
     for content in message.inventory
-      @_inventory.push content
-            
       switch content.type
 
         when Inventory.TYPE.BLOCK
@@ -164,15 +154,8 @@ class Daemon extends EventEmitter
 
   _on_tx: (peer, message)->
     # This method is used when a peer provide a transaction
-    for content in message.inventory when content.type is Inventory.TYPE.TX
-      @_inventory.push content
-      
-      if !~ @_txs.indexOf(content)
-        @_txs.push(content)
-        @emit "tx", message
-
-        reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
-        @emit "#{reverse_hash}", content
+    # reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
+    # @emit "#{reverse_hash}", content
     return
         
   _on_not_found: (peer, message)->

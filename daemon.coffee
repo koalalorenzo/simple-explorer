@@ -13,10 +13,11 @@ received and processed, an event is emitted. Example:
 The daemon requests all the blocks headers
 
 ###
+path = require('path')
+levelup = require('levelup')
 EventEmitter = require('events')
 bitcore = require('bitcore-lib')
 bitcore_p2p = require('bitcore-p2p')
-levelup = require('level')
 
 Pool = bitcore_p2p.Pool
 Inventory = bitcore_p2p.Inventory
@@ -76,6 +77,7 @@ class Daemon extends EventEmitter
     
     @emit "started"
     @_is_started = true
+    console.log "Daemon started" if @_debug
     return @
   
   stop: ->
@@ -88,6 +90,7 @@ class Daemon extends EventEmitter
 
     @emit "stopped"
     @_is_started = false
+    console.log "Daemon stopped" if @_debug
     return @
     
   is_connected: ->
@@ -116,14 +119,25 @@ class Daemon extends EventEmitter
     return
 
   _on_block: (peer, message)->
-    # This method is used when a peer provide a block
-    console.log "FUCK YEAH WE RECEIVED A BLOCK"
-    if !~ @_blocks.indexOf(message.block)
-      @_blocks.push(message.block)
-      @emit "block", message.block
+    # This method is used when a peer provide a block. It will save the headers
+    # in the db and emit the event related to the block's hash.
+    block = message.block
 
-      # reverse_hash = BufferUtil.reverse(message.hash).toString('hex')
-      # @emit "#{reverse_hash}", message
+    if !~ @_blocks.indexOf(block)
+      @_blocks.push(block)
+
+    @emit "block", block
+    
+    # ToDo: Understand if we are interested in this block by inspecting its
+    #       content, then save the entire block too.
+    
+    @storage.put "headers/#{block.hash}", block.headers
+    # @storage.put "blocks/#{block.hash}", block
+
+    reverse_hash = BufferUtil.reverse(block.hash).toString('hex')
+    @emit "#{reverse_hash}", block
+    console.log "#{reverse_hash} headers saved" if @_debug
+    console.log "#{block.hash} duhh" if @_debug
     return
         
   _on_not_found: (peer, message)->
@@ -137,7 +151,6 @@ class Daemon extends EventEmitter
     @emit "inv", message
     
     for content in message.inventory
-      console.log "INVENTORY RECEIVED FROM #{peer.ip} TYPE: #{content.type}"
       @_inventory.push content
             
       switch content.type

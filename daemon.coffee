@@ -3,6 +3,13 @@ This is the Daemon, a class designed to take care of the connections, to save
 the right information required of the blockchain locally and emit events when 
 observing specific elements of the blockchain (blocks, addresses, transactions)
 
+Since Daemon extends EventEmitter, when an block a transaction or some info are
+received and processed, an event is emitted. Example:
+
+  daemon.on "a14811ceb4a53a8d700ab184fa0d3c6be0ae9f22c56ac32af012e00f6737a670", (block) ->
+    # We found the block!
+    console.log block
+
 ###
 Pool = require('bitcore-p2p').Pool
 EventEmitter = require('events')
@@ -65,7 +72,7 @@ class Daemon extends EventEmitter
     return (@node.numberConnected() > 0) or (@_is_started is true)
 
   ###
-  # Callbacks for data collection (storage) and "emit" events
+  # Callbacks for data collection and "emit" events
   ###
 
   _on_tx: (peer, message)->

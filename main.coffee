@@ -66,7 +66,7 @@ if optimist.argv.sync
   
   setInterval ()->
     daemon.request_missing_blocks()
-  , 15000
+  , 7500
 
 else if optimist.argv.address
   # Get the balance of an Address

@@ -77,7 +77,7 @@ class Daemon extends EventEmitter
     # Set up the event listner when a peer disconnects
     @node.on 'peerdisconnect', (peer, message) =>
       if @_debug
-        console.log "DISCONN", peer.version, peer.subversion, peer.bestHeight
+        console.log "DISCONN"
 
     @storage.open() if @storage.isClosed()
     @node.connect()

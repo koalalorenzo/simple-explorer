@@ -13,6 +13,8 @@ received and processed, an event is emitted. Example:
 ###
 Pool = require('bitcore-p2p').Pool
 EventEmitter = require('events')
+bitcore = require('bitcore-lib')
+BufferUtil = bitcore.util.buffer
 
 DEFAULT_SETTINGS =
   node: # bitcoire-p2p pool options:
@@ -45,7 +47,11 @@ class Daemon extends EventEmitter
     # Set up the event listner for NotFound messages
     @node.on 'peernotfound', (peer, message)->
       @_on_not_found(peer, message)
-
+    
+    # Set up the event listner for getdata messages
+    @node.on 'peergetdata', (peer, message)->
+      @_on_data(peer, message)
+      
     # Set up the event listner for inventory messages
     @node.on 'peerinv', (peer, message) ->
       @_on_inventory(peer, message)
@@ -75,15 +81,24 @@ class Daemon extends EventEmitter
   # Callbacks for data collection and "emit" events
   ###
 
+  _on_data: (peer, message) ->
+    for content in message.inventory
+       @_inventory.push content
+
+    @emit "getdata", message
+
   _on_tx: (peer, message)->
     # This method is used when a peer provide a transaction
-    callback(message) if callback
+    for content in message.inventory
+      @_inventory.push content
+      
+      if !~ @_txs.indexOf(content)
+        @_txs.push(content)
+        @emit "tx", message
 
-    if !~ @_txs.indexOf(message)
-      @_txs.push(message) 
-      @emit "tx", message
+        reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
+        @emit "#{reverse_hash}", content
 
-    console.log "Transaction:", message if @_debug
     return
         
   _on_not_found: (peer, message)->
@@ -94,7 +109,9 @@ class Daemon extends EventEmitter
      
   _on_inventory: (peer, message)->
     # This method is used when a peer provide its inventory
-    @_inventory.push message.inventory[0]
+    for content in message.inventory
+      @_inventory.push content
+      
     console.log "Inventory:", message if @_debug
     @emit "inv", message
     return

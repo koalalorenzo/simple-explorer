@@ -11,11 +11,15 @@ optimist = require('optimist')
           .usage("Create a new Bitcoin SPV node and request data from nodes.")
           .string('transaction')
           .alias('transaction', 't')
-          .describe('transaction', 'Get a transaction from its hex hash')
+          .describe('transaction', 'Get a transaction from its hash')
 
           .string('block')
           .alias('block', 'b')
-          .describe('block', 'Get a block from its hex hash')
+          .describe('block', 'Get a block from its hash')
+
+          .string('header')
+          .alias('header', 'h')
+          .describe('header', "Get a block's header from its hash")
 
           .string('address')
           .alias('address', 'a')
@@ -77,16 +81,25 @@ else if optimist.argv.address
   [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_address_balance optimist.argv.address, (_balance)->
-    console.log _balance.toJSON()
+    console.log JSON.stringify _balance.toJSON()
     daemon.stop()
     exit(optimist.argv)
 
+else if optimist.argv.header
+  # Get a block's hash
+  [explorer, daemon] = setup_and_start(optimist.argv)
+  
+  explorer.call_block_header optimist.argv.header, (_header)->
+    console.log JSON.stringify _header.toJSON()
+    daemon.stop()
+    exit(optimist.argv)
+  
 else if optimist.argv.block
   # Get a block
   [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_block optimist.argv.block, (_block)->
-    console.log _block.toJSON()
+    console.log JSON.stringify _block.toJSON()
     daemon.stop()
     exit(optimist.argv)
   
@@ -95,7 +108,7 @@ else if optimist.argv.transaction
   [explorer, daemon] = setup_and_start(optimist.argv)
 
   explorer.call_transaction optimist.argv.transaction, (_tx)->
-    console.log _tx.toJSON()
+    console.log JSON.stringify _tx.toJSON()
     daemon.stop()
     exit(optimist.argv)  
     

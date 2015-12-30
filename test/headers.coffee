@@ -34,6 +34,6 @@ describe 'Block Header', ->
       done()
       
   it 'should be extracted from the explorer', (done)->
-    explorer.call_block_header "000000000000000009a578ae2d8de2b1e554a7d8e40d6c48d8ac214c387065ce", (block)->
-      header.hash.should.equal fake_header.header.hash
+    explorer.call_block_header "000000000000000009a578ae2d8de2b1e554a7d8e40d6c48d8ac214c387065ce", (header)->
+      header.hash.should.equal fake_header.hash
       done()

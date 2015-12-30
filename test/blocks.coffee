@@ -14,7 +14,6 @@ chai.should()
 describe 'Block', ->
   SETTINGS = Daemon.DEFAULT_SETTINGS
   SETTINGS.workdir = temp.mkdirSync "simple-explorer"
-  console.log SETTINGS
   daemon = new Daemon(SETTINGS)
   explorer = new Explorer(daemon.settings, daemon)
   

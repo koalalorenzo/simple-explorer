@@ -112,25 +112,33 @@ class Daemon extends EventEmitter
   # Common database interactions
   ###
   
-  __save_header: (header, cb=null)->
+  save_header: (header, cb=null)->
     # Save a header in the database.
+    return if not header
     string_header = JSON.stringify(header.toJSON())
     @storage.put "headers/#{header.hash}", string_header, (err)->
       cb(err) if cb
 
-  __cb_get_header: (hash, cb) ->
+  cb_get_header: (hash, cb) ->
     # Call the callback (cb) with the header object.
     @storage.get "headers/#{hash}", (_err, _head) ->
       if not _err and _head
         _head = JSON.parse(_head)
       cb(_err, _head)
 
-  __save_block: (block, cb=null)->
+  save_block: (block, cb=null)->
     # Save a block in the database.
     return if not block
     string_header = JSON.stringify(block.toJSON())
     @storage.put "blocks/#{block.hash}", string_header, (err)->
       cb(err) if cb
+
+  cb_get_block: (hash, cb) ->
+    # Call the callback (cb) with the block object.
+    @storage.get "blocks/#{hash}", (_err, _block) ->
+      if not _err and _block
+        _block = JSON.parse(_block)
+      cb(_err, _block)
 
   request_missing_blocks_headers: ->
     # This method will check the database and request the missing headers to
@@ -150,7 +158,7 @@ class Daemon extends EventEmitter
   _request_block_if_hash_is_missing: (prev_hash, recursive=no) ->
     # Check if the block's hash is missing from the db. Then reqeust it to the
     # peers connected.
-    @__cb_get_header prev_hash, (_err, _obj) =>
+    @cb_get_header prev_hash, (_err, _obj) =>
       if _err and prev_hash
         console.log "Headers missing: #{prev_hash}" if @_debug
         @_request_block prev_hash
@@ -188,9 +196,9 @@ class Daemon extends EventEmitter
       @_blocks_headers_known.push header.hash
 
       # if a block's headers is not in the db, let's save it
-      @__cb_get_header header.hash, (err, obj) =>
+      @cb_get_header header.hash, (err, obj) =>
         return if not err
-        @__save_header header 
+        @save_header header 
         console.log "Headers received: #{header.hash}" if @_debug
 
   _on_block: (peer, message)->
@@ -203,9 +211,9 @@ class Daemon extends EventEmitter
     @_last_block = block
           
     # Saving the headers in the DB if not already there
-    @__cb_get_header block.hash, (err, old_header) =>
+    @cb_get_header block.hash, (err, old_header) =>
       return if not err
-      @__save_header block.header
+      @save_header block.header
       console.log "Block received: #{block.hash}" if @_debug
     # @_request_block_if_hash_is_missing block.header.toJSON().prevHash
 
@@ -229,7 +237,7 @@ class Daemon extends EventEmitter
         when Inventory.TYPE.BLOCK
           # If we don't have the headers of this block, request it!
           reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
-          @__cb_get_header reverse_hash, (err, obj) =>
+          @cb_get_header reverse_hash, (err, obj) =>
             return if not err
             console.log "INV BLOCK:", reverse_hash
             @_request_block reverse_hash, peer

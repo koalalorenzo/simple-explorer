@@ -66,7 +66,7 @@ if optimist.argv.sync
   
   setTimeout () ->
     daemon.request_missing_blocks_headers()
-  , 10000
+  , 12000
   
   setInterval ()->
     daemon.request_missing_blocks_headers()

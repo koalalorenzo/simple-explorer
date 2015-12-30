@@ -76,11 +76,11 @@ class Daemon extends EventEmitter
     @node.on 'peerready', (peer, message) =>
       @_on_peer_connected(peer, message)
       if @_debug
-        console.log "CONNECT", peer.version, peer.subversion, peer.bestHeight
+        console.log "CONNECTED: #{peer.host}:#{peer.port}"
 
     # Set up the event listner when a peer disconnects
     @node.on 'peerdisconnect', (peer, message) =>      
-      console.log "DISCONN" if @_debug
+      console.log "DISCONNECTED: #{peer.host}:#{peer.port}" if @_debug
 
     @storage.open() if @storage.isClosed()
     @node.connect()
@@ -121,10 +121,13 @@ class Daemon extends EventEmitter
   __cb_get_header: (hash, cb) ->
     # Call the callback (cb) with the header object.
     @storage.get "headers/#{hash}", (_err, _head) ->
+      if not _err and _head
+        _head = JSON.parse(_head)
       cb(_err, _head)
 
   __save_block: (block, cb=null)->
     # Save a block in the database.
+    return if not block
     string_header = JSON.stringify(block.toJSON())
     @storage.put "blocks/#{block.hash}", string_header, (err)->
       cb(err) if cb
@@ -137,26 +140,25 @@ class Daemon extends EventEmitter
         # Getting from the stream, only the headers
         return if not ~data.key.indexOf("headers/") or not data.value
 
-        block = JSON.parse(data.value)
-        prev_hash = BufferUtil.reverse(block.prevHash).toString('hex')
-        
-        # Add this block headers to the ignore list
-        if !~@_blocks_headers_known.indexOf block.hash
-          @_blocks_headers_known.push(block.hash)
-        
-        # Now If the previous block is not available, request it
-        @_request_headers_if_hash_is_missing block.prevHash
+        header = JSON.parse(data.value)
+        # Now If the previous header is not available, request it
+        @_request_block_if_hash_is_missing header.prevHash, no
 
       .on 'end', () =>
         console.log "Missing headers check completed" if @_debug
 
-  _request_headers_if_hash_is_missing: (prev_hash) ->
-    # Check if the block's hash is missing from the db. then reqeust it to the
+  _request_block_if_hash_is_missing: (prev_hash, recursive=no) ->
+    # Check if the block's hash is missing from the db. Then reqeust it to the
     # peers connected.
     @__cb_get_header prev_hash, (_err, _obj) =>
-      return if not _err
-      console.log "Headers missing: #{prev_hash}" if @_debug
-      @_request_block_headers prev_hash
+      if _err and prev_hash
+        console.log "Headers missing: #{prev_hash}" if @_debug
+        @_request_block prev_hash
+      
+      # Check recursively for missing previous hashes.
+      if recursive and _obj
+        # console.log "Checking: #{_obj.prevHash}" if @_debug
+        @_request_block_if_hash_is_missing _obj.prevHash
 
   ###
   # Callbacks for data collection and "emit" events
@@ -172,7 +174,7 @@ class Daemon extends EventEmitter
     if peer.bestHeight >= @_best_peer.bestHeight
       # if the peer has a bigger Height, ask for his inventory
       @_request_inv(peer)
-      @_best_peer = peer.bestHeight
+      @_best_peer = peer
 
   _on_block_headers: (peer, message)->
     # This method is called when a peer provide a block's headers. It will the
@@ -203,9 +205,9 @@ class Daemon extends EventEmitter
     # Saving the headers in the DB if not already there
     @__cb_get_header block.hash, (err, old_header) =>
       return if not err
-      
+      @__save_header block.header
       console.log "Block received: #{block.hash}" if @_debug
-    @_request_headers_if_hash_is_missing block.header.toJSON().prevHash
+    # @_request_block_if_hash_is_missing block.header.toJSON().prevHash
 
     # ToDo: Understand if we are interested in this block by inspecting its
     #       content, then save the entire block too.
@@ -219,7 +221,7 @@ class Daemon extends EventEmitter
   _on_inventory: (peer, message)->
     # This method is used when a peer provide its inventory
     @emit "inv", message
-    @_last_inventory = message.inventory
+    @_last_inventory = message
 
     for content in message.inventory
       switch content.type
@@ -228,7 +230,12 @@ class Daemon extends EventEmitter
           # If we don't have the headers of this block, request it!
           reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
           @__cb_get_header reverse_hash, (err, obj) =>
-            @_request_block_headers reverse_hash, null, peer if err
+            return if not err
+            console.log "INV BLOCK:", reverse_hash
+            @_request_block reverse_hash, peer
+            # The peer does not provide the headers if after a INV we send a 
+            # getHeaders method. Requesting the block provided.
+            # @_request_block_headers reverse_hash, null, peer
             
         # when Inventory.TYPE.TX then @request_tx content.hash
         # when Inventory.TYPE.FILTERED_BLOCK then 
@@ -255,6 +262,7 @@ class Daemon extends EventEmitter
     messages = new bitcore_p2p.Messages()
     message = messages.GetBlocks()
 
+    console.log "Requesting Inventory" if @_debug
     if peer 
       peer.sendMessage message
     else
@@ -267,6 +275,8 @@ class Daemon extends EventEmitter
 
     if hash_stop
       options.stop = hash_stop
+
+    console.log "Requesting block headers: #{hash_start}" if @_debug
 
     messages = new bitcore_p2p.Messages()
     message = messages.GetHeaders(options)
@@ -281,6 +291,7 @@ class Daemon extends EventEmitter
     messages = new bitcore_p2p.Messages()
     message = messages.GetData.forBlock(hash)
     
+    console.log "Requesting block: #{hash}" if @_debug
     if peer 
       peer.sendMessage message
     else

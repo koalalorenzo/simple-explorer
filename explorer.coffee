@@ -38,9 +38,20 @@ class Explorer
         @daemon.on block_hash, callback
           
         @daemon.broadcast_message message, time_gap=15000
-        return @
       else
         callback(block)
+      return @
+
+  call_block_header: (block_hash, callback) ->
+    # Use a callback to get the object of a block's header
+    
+    @daemon.cb_get_header block_hash, (_err, header)->
+      if _err
+        @daemon._request_block_headers block_hash, block_hash
+        @daemon.on block_hash, callback
+      else
+        callback(header)
+      return @
 
   call_address_balance: (address_hash, callback) ->
     console.error "Work in progress... Sorry!"  

@@ -1,5 +1,5 @@
 ###
-Tests to verify the behaviour when interacting with blocks 
+Tests to verify the behaviour when interacting with header's blocks 
 ###
 temp = require 'temp'
 chai = require 'chai'

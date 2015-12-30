@@ -64,9 +64,13 @@ exit = (args)->
 if optimist.argv.sync
   [explorer, daemon] = setup_and_start(optimist.argv)
   
+  setTimeout () ->
+    daemon.request_missing_blocks_headers()
+  , 10000
+  
   setInterval ()->
-    daemon.request_missing_blocks()
-  , 7500
+    daemon.request_missing_blocks_headers()
+  , 30000
 
 else if optimist.argv.address
   # Get the balance of an Address

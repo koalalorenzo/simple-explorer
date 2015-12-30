@@ -23,7 +23,7 @@ BufferUtil = bitcore.util.buffer
 
 DEFAULT_SETTINGS =
   node: # bitcoire-p2p pool options:
-    maxSize: 32
+    maxSize: 8
     relay: false
     dnsSeed: true
     listenAddr: true
@@ -33,13 +33,13 @@ DEFAULT_SETTINGS =
 class Daemon extends EventEmitter
   constructor: (@settings=DEFAULT_SETTINGS) ->
     @node = new Pool(@settings.node)
+    @_bestPeer = null
     
     @_debug = @settings.debug or false
     @_intervals = []
     
     @storage = levelup(@settings.workdir)
     @_blocks_headers_known = [] # Used to avoid multipe callbacks
-    @_bestHeight = 0
     
     @_is_started = false
     
@@ -51,6 +51,10 @@ class Daemon extends EventEmitter
   start: (listen=true)->
     # Start the bitcoin pool and connect to other peers. 
     return if @is_connected()
+ 
+    # Set up the event listner for transactions
+    @node.on 'peerheaders', (peer, message) =>
+      @_on_block_headers(peer, message)
   
     # Set up the event listner for transactions
     @node.on 'peerblock', (peer, message) =>
@@ -75,9 +79,8 @@ class Daemon extends EventEmitter
         console.log "CONNECT", peer.version, peer.subversion, peer.bestHeight
 
     # Set up the event listner when a peer disconnects
-    @node.on 'peerdisconnect', (peer, message) =>
-      if @_debug
-        console.log "DISCONN"
+    @node.on 'peerdisconnect', (peer, message) =>      
+      console.log "DISCONN" if @_debug
 
     @storage.open() if @storage.isClosed()
     @node.connect()
@@ -105,7 +108,28 @@ class Daemon extends EventEmitter
     # Validate if the Daemon's node is connected to the network.
     return (@node.numberConnected() > 0) or (@_is_started is true)
 
-  request_missing_blocks: ->
+  ###
+  # Common database interactions
+  ###
+  
+  __save_header: (header, cb=null)->
+    # Save a header in the database.
+    string_header = JSON.stringify(header.toJSON())
+    @storage.put "headers/#{header.hash}", string_header, (err)->
+      cb(err) if cb
+
+  __cb_get_header: (hash, cb) ->
+    # Call the callback (cb) with the header object.
+    @storage.get "headers/#{hash}", (_err, _head) ->
+      cb(_err, _head)
+
+  __save_block: (block, cb=null)->
+    # Save a block in the database.
+    string_header = JSON.stringify(block.toJSON())
+    @storage.put "blocks/#{block.hash}", string_header, (err)->
+      cb(err) if cb
+  
+  request_missing_blocks_headers: ->
     # This method will check the database and request the missing headers to
     # the other peers.
     @storage.createReadStream()
@@ -132,10 +156,12 @@ class Daemon extends EventEmitter
   
   _check_if_previous_block_missing: (prev_hash) ->
     # Check if the previous block is missing from the storage
-    @storage.get "headers/#{prev_hash}", (_err, _head) =>
+    return if ~@_blocks_headers_known.indexOf prev_hash
+
+    @__cb_get_header prev_hash, (_err, _obj) =>
       return if not _err
       console.log "Headers missing: #{prev_hash}" if @_debug
-      @_request_block prev_hash
+      @_request_block_headers prev_hash
 
   _on_peer_connected: (peer, message) ->
     # This method is used when a peer is connected.
@@ -143,7 +169,23 @@ class Daemon extends EventEmitter
     if peer.bestHeight >= @_bestHeight
       # if the peer has a bigger Height, ask for his inventory
       @_request_inv(peer)
-      @_bestHeight = peer.bestHeight
+      @_bestPeer = peer.bestHeight
+
+  _on_block_headers: (peer, message)->
+    # This method is called when a peer provide a block's headers. It will the
+    # object in the db and emit the event related to the block's hash headers.
+    @_last_message = message
+    @emit "headers", message.headers
+
+    for header in message.headers when header.hash
+      # Ignore if this block is already known
+      return if ~@_blocks_headers_known.indexOf header.hash
+
+      # if a block's headers is not in the db, let's save it
+      @__cb_get_header header.hash, (err, obj) =>
+        return if not err
+        @__save_header header 
+        console.log "Headers received: #{header.hash}" if @_debug
 
   _on_block: (peer, message)->
     # This method is used when a peer provide a block. It will save the headers
@@ -153,18 +195,13 @@ class Daemon extends EventEmitter
     @emit "block", block
     @emit "#{block.hash}", block
     @_last_block = block
-    
-    # Ignore if this block is already known
-    return if ~@_blocks_headers_known.indexOf block.hash 
-      
+          
     # Saving the headers in the DB if not already there
-    @storage.get "headers/#{block.hash}", (err, old_header) =>
+    @__cb_get_header block.hash, (err, old_header) =>
       return if not err
-      console.log "Block received: #{block.hash}" if @_debug
       
-      string_header = JSON.stringify(block.header.toJSON())
-      @storage.put "headers/#{block.hash}", string_header
-      @_check_if_previous_block_missing block.header.toJSON().prevHash
+      console.log "Block received: #{block.hash}" if @_debug
+    @_check_if_previous_block_missing block.header.toJSON().prevHash
 
     # ToDo: Understand if we are interested in this block by inspecting its
     #       content, then save the entire block too.
@@ -185,9 +222,9 @@ class Daemon extends EventEmitter
 
         when Inventory.TYPE.BLOCK
           # If we don't have the headers of this block, request it!
-          @storage.get "headers/#{content.hash}", (err, cont) =>
-            @_request_block content.hash if err
-
+          @__cb_get_header content.hash, (err, obj) =>
+            @_request_block_headers content.hash if err
+            
         # when Inventory.TYPE.TX then @request_tx content.hash
         # when Inventory.TYPE.FILTERED_BLOCK then 
     return
@@ -218,6 +255,19 @@ class Daemon extends EventEmitter
     else
       @broadcast_message message, time_gap=0
     
+  _request_block_headers: (hash_start, hash_stop=null, peer=null)->
+    # Send a message to a peer (optional) requiring a specific block headers.
+    options =
+      starts: [hash_start]
+      
+    messages = new bitcore_p2p.Messages()
+    message = messages.GetHeaders(options)
+    
+    if peer 
+      peer.sendMessage message
+    else
+      @broadcast_message message, time_gap=0
+    
   _request_block: (hash, peer=null)->
     # Send a message to a peer (optional) requiring a specific block.
     messages = new bitcore_p2p.Messages()
@@ -241,7 +291,8 @@ class Daemon extends EventEmitter
           @node.sendMessage message
         , time_gap
       @_intervals.push new_interval
-    return
+    return 
     
+       
 module.exports = Daemon
 module.exports.DEFAULT_SETTINGS = DEFAULT_SETTINGS

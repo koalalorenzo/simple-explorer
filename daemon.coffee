@@ -33,7 +33,7 @@ DEFAULT_SETTINGS =
 class Daemon extends EventEmitter
   constructor: (@settings=DEFAULT_SETTINGS) ->
     @node = new Pool(@settings.node)
-    @_bestPeer = null
+    @_best_peer = null
     
     @_debug = @settings.debug or false
     @_intervals = []
@@ -128,7 +128,7 @@ class Daemon extends EventEmitter
     string_header = JSON.stringify(block.toJSON())
     @storage.put "blocks/#{block.hash}", string_header, (err)->
       cb(err) if cb
-  
+
   request_missing_blocks_headers: ->
     # This method will check the database and request the missing headers to
     # the other peers.
@@ -140,36 +140,39 @@ class Daemon extends EventEmitter
         block = JSON.parse(data.value)
         prev_hash = BufferUtil.reverse(block.prevHash).toString('hex')
         
-        # Ignore blocks that are already in the DB
+        # Add this block headers to the ignore list
         if !~@_blocks_headers_known.indexOf block.hash
           @_blocks_headers_known.push(block.hash)
         
         # Now If the previous block is not available, request it
-        @_check_if_previous_block_missing block.prevHash
+        @_request_headers_if_hash_is_missing block.prevHash
 
       .on 'end', () =>
         console.log "Missing headers check completed" if @_debug
 
-  ###
-  # Callbacks for data collection and "emit" events
-  ###
-  
-  _check_if_previous_block_missing: (prev_hash) ->
-    # Check if the previous block is missing from the storage
-    return if ~@_blocks_headers_known.indexOf prev_hash
-
+  _request_headers_if_hash_is_missing: (prev_hash) ->
+    # Check if the block's hash is missing from the db. then reqeust it to the
+    # peers connected.
     @__cb_get_header prev_hash, (_err, _obj) =>
       return if not _err
       console.log "Headers missing: #{prev_hash}" if @_debug
       @_request_block_headers prev_hash
 
+  ###
+  # Callbacks for data collection and "emit" events
+  ###
+  
   _on_peer_connected: (peer, message) ->
     # This method is used when a peer is connected.
+    
+    # Initally, best_peer is null
+    if not @_best_peer
+      @_best_peer = peer
 
-    if peer.bestHeight >= @_bestHeight
+    if peer.bestHeight >= @_best_peer.bestHeight
       # if the peer has a bigger Height, ask for his inventory
       @_request_inv(peer)
-      @_bestPeer = peer.bestHeight
+      @_best_peer = peer.bestHeight
 
   _on_block_headers: (peer, message)->
     # This method is called when a peer provide a block's headers. It will the
@@ -177,9 +180,10 @@ class Daemon extends EventEmitter
     @_last_message = message
     @emit "headers", message.headers
 
-    for header in message.headers when header.hash
+    message.headers.forEach (header) =>
       # Ignore if this block is already known
       return if ~@_blocks_headers_known.indexOf header.hash
+      @_blocks_headers_known.push header.hash
 
       # if a block's headers is not in the db, let's save it
       @__cb_get_header header.hash, (err, obj) =>
@@ -201,7 +205,7 @@ class Daemon extends EventEmitter
       return if not err
       
       console.log "Block received: #{block.hash}" if @_debug
-    @_check_if_previous_block_missing block.header.toJSON().prevHash
+    @_request_headers_if_hash_is_missing block.header.toJSON().prevHash
 
     # ToDo: Understand if we are interested in this block by inspecting its
     #       content, then save the entire block too.
@@ -222,8 +226,9 @@ class Daemon extends EventEmitter
 
         when Inventory.TYPE.BLOCK
           # If we don't have the headers of this block, request it!
-          @__cb_get_header content.hash, (err, obj) =>
-            @_request_block_headers content.hash if err
+          reverse_hash = BufferUtil.reverse(content.hash).toString('hex')
+          @__cb_get_header reverse_hash, (err, obj) =>
+            @_request_block_headers reverse_hash, null, peer if err
             
         # when Inventory.TYPE.TX then @request_tx content.hash
         # when Inventory.TYPE.FILTERED_BLOCK then 
@@ -259,7 +264,10 @@ class Daemon extends EventEmitter
     # Send a message to a peer (optional) requiring a specific block headers.
     options =
       starts: [hash_start]
-      
+
+    if hash_stop
+      options.stop = hash_stop
+
     messages = new bitcore_p2p.Messages()
     message = messages.GetHeaders(options)
     

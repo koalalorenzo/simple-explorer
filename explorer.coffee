@@ -29,14 +29,19 @@ class Explorer
 
   call_block: (block_hash, callback) ->
     # Use a callback to get the object of a block
-    messages = new bitcore_p2p.Messages()
-    message = messages.GetData.forBlock(block_hash)
     
-    @daemon.on block_hash, callback
-      
-    @daemon.broadcast_message message, time_gap=15000
-    return @
-    
+    @daemon.cb_get_block block_hash, (_err, block)->
+      if _err
+        messages = new bitcore_p2p.Messages()
+        message = messages.GetData.forBlock(block_hash)
+        
+        @daemon.on block_hash, callback
+          
+        @daemon.broadcast_message message, time_gap=15000
+        return @
+      else
+        callback(block)
+
   call_address_balance: (address_hash, callback) ->
     console.error "Work in progress... Sorry!"  
     # process.exit(1)

@@ -24,7 +24,6 @@ Once ready, the CLI to the explorer is `main.coffee`. To get some help run:
 
     coffee main.coffee --help
 
-
 ## How to contribute
 To know what is left to do, run the tests!
 
@@ -33,7 +32,7 @@ To know what is left to do, run the tests!
 
 If a test is failing, it means that some work is required to implement that 
 feature, imrpove that test or verify manually what is wrong... and remember to
-write KISS code!
+write **KISS code**, and use **git flow**!
 
 If you don't know how to code, but you want to support this project, donate 
-some satoshi to this address: 18ib128yA9WqapKEWw1MSkaJJPrhixyL1L
+some satoshi to this address: [18ib128yA9WqapKEWw1MSkaJJPrhixyL1L](bitcoin:18ib128yA9WqapKEWw1MSkaJJPrhixyL1L?amount=0.025)

@@ -29,7 +29,7 @@ describe 'Block Header', ->
 
   it 'should be extracted directly from the database correctly', (done)->
     daemon.cb_get_header "000000000000000009a578ae2d8de2b1e554a7d8e40d6c48d8ac214c387065ce", (err, _block) ->
-      previous_hash = _block.prevHash.toString('hex')
+      previous_hash = BufferUtil.reverse(_block.prevHash).toString('hex')
       previous_hash.should.equal "00000000000000000a5e4ad1a847fd13dc56bc107595a9bd82808e9e6d7a37ed"
       done()
       
@@ -37,3 +37,4 @@ describe 'Block Header', ->
     explorer.call_block_header "000000000000000009a578ae2d8de2b1e554a7d8e40d6c48d8ac214c387065ce", (header)->
       header.hash.should.equal fake_header.hash
       done()
+      

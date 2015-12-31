@@ -17,9 +17,11 @@ EventEmitter = require('events')
 bitcore = require('bitcore-lib')
 bitcore_p2p = require('bitcore-p2p')
 
+Block = bitcore.Block
+BlockHeader = bitcore.BlockHeader
+BufferUtil = bitcore.util.buffer
 Pool = bitcore_p2p.Pool
 Inventory = bitcore_p2p.Inventory
-BufferUtil = bitcore.util.buffer
 
 DEFAULT_SETTINGS =
   node: # bitcoire-p2p pool options:
@@ -123,7 +125,7 @@ class Daemon extends EventEmitter
     # Call the callback (cb) with the header object.
     @storage.get "headers/#{hash}", (_err, _head) ->
       if not _err and _head
-        _head = JSON.parse(_head)
+        _head = new BlockHeader(JSON.parse(_head))
       cb(_err, _head)
 
   save_block: (block, cb=null)->
@@ -137,7 +139,7 @@ class Daemon extends EventEmitter
     # Call the callback (cb) with the block object.
     @storage.get "blocks/#{hash}", (_err, _block) ->
       if not _err and _block
-        _block = JSON.parse(_block)
+        _block = new Block(JSON.parse(_block))
       cb(_err, _block)
 
   request_missing_blocks_headers: ->

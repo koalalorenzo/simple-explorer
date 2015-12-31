@@ -46,8 +46,10 @@ explorer = undefined
 # Methods
 ###
 
+# Start the node! It will return an array with the explorer and the daemon.
+# @param {Object} args - process arguments parsed by optimist
+# @returns {Array} [explorer,daemon] - An array with the Explorer and the Daemon
 setup_and_start = (args) ->
-  # Start the node! It will return an array with the explorer and the daemon.
   daemon = new Daemon()
   daemon._debug = args.debug
   daemon.start()
@@ -55,26 +57,39 @@ setup_and_start = (args) ->
   explorer = new Explorer(daemon.settings, daemon)
   return [explorer, daemon]
 
+# Quit
+# @param {Object} args - process arguments parsed by optimist
 exit = (args)->
+  daemon.stop()
   console.log("Closing the process in 1 second...") if args.debug == true
   setTimeout ()->
     process.exit 0
   , 1500
+
+# Start the daemon in order to downlaod the blockchain headers into the db.
+# It will start the daemon, as soon as a peer is connected, the inventory
+# should be provided (and requested), this will allows the daemon to ask for
+# blocks and block's headers. When a block or block's header is received
+# the daemon will check if the previous block's header are saved in the 
+# database, if not it will start looking for that.
+# 
+# After few 30s from the start, a second periodic check shoud verify that all
+# the blocks' headers have a link (the previous block's header is in the db)
+# if not it will be required from the network.
+# @param {Object} args - process arguments parsed by optimist
+syncronize = (args)->
+  [explorer, daemon] = setup_and_start(optimist.argv)
+  
+  setInterval ()->
+    daemon.request_missing_blocks_headers()
+  , 30000
 
 ###
 # Parsing the CLI options and running methods:
 ###
 
 if optimist.argv.sync
-  [explorer, daemon] = setup_and_start(optimist.argv)
-  
-  setTimeout () ->
-    daemon.request_missing_blocks_headers()
-  , 12000
-  
-  setInterval ()->
-    daemon.request_missing_blocks_headers()
-  , 30000
+  syncronize()
 
 else if optimist.argv.address
   # Get the balance of an Address

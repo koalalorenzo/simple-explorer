@@ -11,6 +11,7 @@ received and processed, an event is emitted. Example:
     console.log block
 
 ###
+
 path = require('path')
 levelup = require('levelup')
 EventEmitter = require('events')
@@ -50,8 +51,8 @@ class Daemon extends EventEmitter
     @_last_inventory = []
     return @
 
+  # Start the bitcoin pool and connect to other peers. 
   start: (listen=true)->
-    # Start the bitcoin pool and connect to other peers. 
     return if @is_connected()
  
     # Set up the event listner for transactions
@@ -93,8 +94,8 @@ class Daemon extends EventEmitter
     console.log "Daemon started" if @_debug
     return @
   
+  # Stop the connections, destroy the intervals
   stop: ->
-    # Stop the connections, destroy the intervals
     for _interval in @_intervals
       clearInterval _interval
 
@@ -106,45 +107,45 @@ class Daemon extends EventEmitter
     console.log "Daemon stopped" if @_debug
     return @
     
+  # Validate if the Daemon's node is connected to the network.
   is_connected: ->
-    # Validate if the Daemon's node is connected to the network.
-    return (@node.numberConnected() > 0) or (@_is_started is true)
+    return (@node.numberConnected() > 0) and (@_is_started is true)
 
   ###
   # Common database interactions
   ###
   
+  # Save a header in the database.
   save_header: (header, cb=null)->
-    # Save a header in the database.
     return if not header
     string_header = JSON.stringify(header.toJSON())
     @storage.put "headers/#{header.hash}", string_header, (err)->
       cb(err) if cb
 
+  # Call the callback (cb) with the header object.
   cb_get_header: (hash, cb) ->
-    # Call the callback (cb) with the header object.
     @storage.get "headers/#{hash}", (_err, _head) ->
       if not _err and _head
         _head = new BlockHeader(JSON.parse(_head))
       cb(_err, _head)
 
+  # Save a block in the database.
   save_block: (block, cb=null)->
-    # Save a block in the database.
     return if not block
     string_header = JSON.stringify(block.toJSON())
     @storage.put "blocks/#{block.hash}", string_header, (err)->
       cb(err) if cb
 
+  # Call the callback (cb) with the block object.
   cb_get_block: (hash, cb) ->
-    # Call the callback (cb) with the block object.
     @storage.get "blocks/#{hash}", (_err, _block) ->
       if not _err and _block
         _block = new Block(JSON.parse(_block))
       cb(_err, _block)
 
+  # This method will check the database and request the missing headers to
+  # the other peers.
   request_missing_blocks_headers: ->
-    # This method will check the database and request the missing headers to
-    # the other peers.
     @storage.createReadStream()
       .on 'data', (data) =>
         # Getting from the stream, only the headers
@@ -157,9 +158,9 @@ class Daemon extends EventEmitter
       .on 'end', () =>
         console.log "Missing headers check completed" if @_debug
 
+  # Check if the block's hash is missing from the db. Then reqeust it to the
+  # peers connected.
   _request_block_if_hash_is_missing: (prev_hash, recursive=no) ->
-    # Check if the block's hash is missing from the db. Then reqeust it to the
-    # peers connected.
     @cb_get_header prev_hash, (_err, _obj) =>
       if _err and prev_hash
         console.log "Headers missing: #{prev_hash}" if @_debug
@@ -174,8 +175,8 @@ class Daemon extends EventEmitter
   # Callbacks for data collection and "emit" events
   ###
   
+  # This method is used when a peer is connected.
   _on_peer_connected: (peer, message) ->
-    # This method is used when a peer is connected.
     
     # Initally, best_peer is null
     if not @_best_peer
@@ -183,12 +184,12 @@ class Daemon extends EventEmitter
 
     if peer.bestHeight >= @_best_peer.bestHeight
       # if the peer has a bigger Height, ask for his inventory
-      @_request_inv(peer)
+      @_request_blocks(peer)
       @_best_peer = peer
 
+  # This method is called when a peer provide a block's headers. It will the
+  # object in the db and emit the event related to the block's hash headers.
   _on_block_headers: (peer, message)->
-    # This method is called when a peer provide a block's headers. It will the
-    # object in the db and emit the event related to the block's hash headers.
     @_last_message = message
     @emit "headers", message.headers
 
@@ -203,9 +204,9 @@ class Daemon extends EventEmitter
         @save_header header 
         console.log "Headers received: #{header.hash}" if @_debug
 
+  # This method is used when a peer provide a block. It will save the headers
+  # in the db and emit the event related to the block's hash.
   _on_block: (peer, message)->
-    # This method is used when a peer provide a block. It will save the headers
-    # in the db and emit the event related to the block's hash.
     block = message.block
 
     @emit "block", block
@@ -221,15 +222,11 @@ class Daemon extends EventEmitter
 
     # ToDo: Understand if we are interested in this block by inspecting its
     #       content, then save the entire block too.
-    # @storage.get "blocks/#{block.hash}", (err, old_block) =>
-    #   return if not err
-    #   string_block = JSON.stringify(block.toJSON())
-    #   @storage.put "blocks/#{block.hash}", string_block
   
     return
      
+  # This method is used when a peer provide its inventory
   _on_inventory: (peer, message)->
-    # This method is used when a peer provide its inventory
     @emit "inv", message
     @_last_inventory = message
 
@@ -251,10 +248,10 @@ class Daemon extends EventEmitter
         # when Inventory.TYPE.FILTERED_BLOCK then 
     return
 
+  # This method is used when a peer provide a transaction
+  # reverse_hash = BufferUtil.reverse(tx_hash).toString('hex')
   _on_tx: (peer, message)->
-    # This method is used when a peer provide a transaction
-    # reverse_hash = BufferUtil.reverse(tx_hash).toString('hex')
-    # @emit "#{reverse_hash}", content
+    # @emit "#{tx_hash}", content
     return
         
   _on_not_found: (peer, message)->
@@ -267,12 +264,12 @@ class Daemon extends EventEmitter
   # Sending messages to other peers
   ###
   
-  _request_inv: (peer=null)->
-    # Request the inventory to a peer (optional)
+  # Request the inventory to a peer (optional)
+  _request_blocks: (peer=null)->
     messages = new bitcore_p2p.Messages()
     message = messages.GetBlocks()
 
-    console.log "Requesting Inventory" if @_debug
+    console.log "Requesting Blocks" if @_debug
     if peer 
       peer.sendMessage message
     else
@@ -296,8 +293,8 @@ class Daemon extends EventEmitter
     else
       @broadcast_message message, time_gap=0
     
+  # Send a message to a peer (optional) requiring a specific block.
   _request_block: (hash, peer=null)->
-    # Send a message to a peer (optional) requiring a specific block.
     messages = new bitcore_p2p.Messages()
     message = messages.GetData.forBlock(hash)
     
@@ -307,11 +304,11 @@ class Daemon extends EventEmitter
     else
       @broadcast_message message, time_gap=0
 
+  # Set an interval (default 15sec) to broadcast a Message to the
+  # peers connected. If the time_gap option is set to 0, it will just
+  # broadcast the message once. It will try several times (default 5) and 
+  # and then the interval will be remved. This is to prevent spam.
   broadcast_message: (message, time_gap=15000, max_attemps=5)->
-    # Set an interval (default 15sec) to broadcast a Message to the
-    # peers connected. If the time_gap option is set to 0, it will just
-    # broadcast the message once. It will try several times (default 5) and 
-    # and then the interval will be remved. This is to prevent spam.
     @node.sendMessage message
     
     if time_gap > 0

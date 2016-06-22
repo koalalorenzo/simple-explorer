@@ -35,4 +35,4 @@ feature, imrpove that test or verify manually what is wrong... and remember to
 write **KISS code**, and use **git flow**!
 
 If you don't know how to code, but you want to support this project, donate
-some satoshi to this address: [18ib128yA9WqapKEWw1MSkaJJPrhixyL1L](bitcoin:18ib128yA9WqapKEWw1MSkaJJPrhixyL1L?amount=0.025)
+some satoshi to this address: [1N8W5Nq7kRSr74qmsJZ2Ad6zWDN561vMNE](bitcoin:1N8W5Nq7kRSr74qmsJZ2Ad6zWDN561vMNE?amount=0.025)
